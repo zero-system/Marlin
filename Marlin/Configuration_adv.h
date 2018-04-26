@@ -900,6 +900,38 @@
  */
 //#define ADVANCED_PAUSE_FEATURE
 #if ENABLED(ADVANCED_PAUSE_FEATURE)
+  #define PAUSE_PARK_RETRACT_FEEDRATE 60      // (mm/s) Initial retract feedrate.
+  #define PAUSE_PARK_RETRACT_LENGTH 2         // (mm) Initial retract.
+                                              // This short retract is done immediately, before parking the nozzle.
+  #define FILAMENT_CHANGE_UNLOAD_FEEDRATE 10  // (mm/s) Unload filament feedrate. This can be pretty fast.
+  #define FILAMENT_CHANGE_UNLOAD_LENGTH 100   // (mm) The length of filament for a complete unload.
+                                              //   For Bowden, the full length of the tube and nozzle.
+                                              //   For direct drive, the full length of the nozzle.
+                                              //   Set to 0 for manual unloading.
+  #define FILAMENT_CHANGE_LOAD_FEEDRATE 6     // (mm/s) Load filament feedrate. This can be pretty fast.
+  #define FILAMENT_CHANGE_LOAD_LENGTH 0       // (mm) Load length of filament, from extruder gear to nozzle.
+                                              //   For Bowden, the full length of the tube and nozzle.
+                                              //   For direct drive, the full length of the nozzle.
+  #define ADVANCED_PAUSE_EXTRUDE_FEEDRATE 3   // (mm/s) Extrude feedrate (after loading). Should be slower than load feedrate.
+  #define ADVANCED_PAUSE_EXTRUDE_LENGTH 50    // (mm) Length to extrude after loading.
+                                              //   Set to 0 for manual extrusion.
+                                              //   Filament can be extruded repeatedly from the Filament Change menu
+                                              //   until extrusion is consistent, and to purge old filament.
+
+                                              // Filament Unload does a Retract, Delay, and Purge first:
+  #define FILAMENT_UNLOAD_RETRACT_LENGTH 13   // (mm) Unload initial retract length.
+  #define FILAMENT_UNLOAD_DELAY 5000          // (ms) Delay for the filament to cool after retract.
+  #define FILAMENT_UNLOAD_PURGE_LENGTH 8      // (mm) An unretract is done, then this length is purged.
+
+  #define PAUSE_PARK_NOZZLE_TIMEOUT 45        // (seconds) Time limit before the nozzle is turned off for safety.
+  #define FILAMENT_CHANGE_ALERT_BEEPS 10      // Number of alert beeps to play when a response is needed.
+  #define PAUSE_PARK_NO_STEPPER_TIMEOUT       // Enable for XYZ steppers to stay powered on during filament change.
+
+  //#define PARK_HEAD_ON_PAUSE                // Park the nozzle during pause and filament change.
+  //#define HOME_BEFORE_FILAMENT_CHANGE       // Ensure homing has been completed prior to parking for filament change
+
+  //#define FILAMENT_LOAD_UNLOAD_GCODES       // Add M701/M702 Load/Unload G-codes, plus Load/Unload in the LCD Prepare menu.
+  //#define FILAMENT_UNLOAD_ALL_EXTRUDERS     // Allow M702 to unload all extruders above a minimum target temp (as set by M302)
 #endif
 
 // @section tmc
@@ -982,20 +1014,8 @@
  * in your `pins_MYBOARD.h` file. (e.g., RAMPS 1.4 uses AUX3 pins `X_CS_PIN 53`, `Y_CS_PIN 49`, etc.).
  * You may also use software SPI if you wish to use general purpose IO pins.
  */
-//#define HAVE_TMC2130
 #define HAVE_TMC2130
 #if ENABLED(HAVE_TMC2130)  // Choose your axes here. This is mandatory!
-  //#define X_IS_TMC2130
-  //#define X2_IS_TMC2130
-  //#define Y_IS_TMC2130
-  //#define Y2_IS_TMC2130
-  //#define Z_IS_TMC2130
-  //#define Z2_IS_TMC2130
-  //#define E0_IS_TMC2130
-  //#define E1_IS_TMC2130
-  //#define E2_IS_TMC2130
-  //#define E3_IS_TMC2130
-  //#define E4_IS_TMC2130
   #define  X_IS_TMC2130
   #define  Y_IS_TMC2130
   #define  Z_IS_TMC2130
@@ -1037,35 +1057,19 @@
 
 #if ENABLED(HAVE_TMC2130) || ENABLED(HAVE_TMC2208)
 
-  #define R_SENSE           0.11  // R_sense resistor for SilentStepStick2130
-  #define HOLD_MULTIPLIER    0.5  // Scales down the holding current from run current
   #define R_SENSE           0.22  // R_sense resistor for SilentStepStick2130 (0.22 on Einsy) (0.11 on stand-alone chip)
   #define HOLD_MULTIPLIER   0.25  // Scales down the holding current from run current
   #define INTERPOLATE       true  // Interpolate X/Y/Z_MICROSTEPS to 256
 
-  #define X_CURRENT          800  // rms current in mA. Multiply by 1.41 for peak current.
-  #define X_MICROSTEPS        16  // 0..256
   #define X_CURRENT         1400  // rms current in mA. Multiply by 1.41 for peak current.
   #define X_MICROSTEPS        16  // 0..256 was 16
 
-  #define Y_CURRENT          800
   #define Y_CURRENT         1400
   #define Y_MICROSTEPS        16
 
-  #define Z_CURRENT          800
   #define Z_CURRENT         1400
   #define Z_MICROSTEPS        16
 
-  #define X2_CURRENT         800
-  #define X2_MICROSTEPS       16
-
-  #define Y2_CURRENT         800
-  #define Y2_MICROSTEPS       16
-
-  #define Z2_CURRENT         800
-  #define Z2_MICROSTEPS       16
-
-  #define E0_CURRENT         800
   #define E0_CURRENT        1400
   #define E0_MICROSTEPS       16
 
@@ -1104,7 +1108,6 @@
    * Use Trinamic's ultra quiet stepping mode.
    * When disabled, Marlin will use spreadCycle stepping mode.
    */
-  #define STEALTHCHOP
   //#define STEALTHCHOP
 
   /**
@@ -1118,11 +1121,9 @@
    * M912 - Clear stepper driver overtemperature pre-warn condition flag.
    * M122 S0/1 - Report driver parameters (Requires TMC_DEBUG)
    */
-  //#define MONITOR_DRIVER_STATUS
   #define MONITOR_DRIVER_STATUS
 
   #if ENABLED(MONITOR_DRIVER_STATUS)
-    #define CURRENT_STEP_DOWN     50  // [mA]
     #define CURRENT_STEP_DOWN     25  // [mA]
     #define REPORT_CURRENT_CHANGE
     #define STOP_ON_ERROR
@@ -1136,17 +1137,6 @@
    */
   //#define HYBRID_THRESHOLD
 
-  #define X_HYBRID_THRESHOLD     100  // [mm/s]
-  #define X2_HYBRID_THRESHOLD    100
-  #define Y_HYBRID_THRESHOLD     100
-  #define Y2_HYBRID_THRESHOLD    100
-  #define Z_HYBRID_THRESHOLD       3
-  #define Z2_HYBRID_THRESHOLD      3
-  #define E0_HYBRID_THRESHOLD     30
-  #define E1_HYBRID_THRESHOLD     30
-  #define E2_HYBRID_THRESHOLD     30
-  #define E3_HYBRID_THRESHOLD     30
-  #define E4_HYBRID_THRESHOLD     30
   #define X_HYBRID_THRESHOLD      45  // [mm/s]
   #define Y_HYBRID_THRESHOLD      45
   #define Z_HYBRID_THRESHOLD       1
@@ -1184,7 +1174,6 @@
    * Enable M122 debugging command for TMC stepper drivers.
    * M122 S0/1 will enable continous reporting.
    */
-  //#define TMC_DEBUG
   #define TMC_DEBUG
 
   /**
