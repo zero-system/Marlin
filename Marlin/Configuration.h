@@ -398,7 +398,7 @@
 // If your configuration is significantly different than this and you don't understand the issues involved, you probably
 // shouldn't use bed PID until someone else verifies your hardware works.
 // If this is enabled, find your own PID constants below.
-//#define PIDTEMPBED
+#define PIDTEMPBED
 
 //#define BED_LIMIT_SWITCHING
 
@@ -410,7 +410,7 @@
 
 #if ENABLED(PIDTEMPBED)
 
-  //#define PID_BED_DEBUG // Sends debug data to the serial port.
+  #define PID_BED_DEBUG // Sends debug data to the serial port.
 
   //120V 250W silicone heater into 4mm borosilicate (MendelMax 1.5+)
   //from FOPDT model - kp=.39 Tp=405 Tdead=66, Tc set to 79.2, aggressive factor of .15 (vs .1, 1, 10)
@@ -543,7 +543,7 @@
  * Override with M92
  *                                      X, Y, Z, E0 [, E1[, E2[, E3[, E4]]]]
  */
-//#define DEFAULT_AXIS_STEPS_PER_UNIT   { 50, 50, 756, 408 }  // default steps per unit for AO-101 1/8th step
+//#define DEFAULT_AXIS_STEPS_PER_UNIT   { 50, 50, 756, 408 }     // default for AO-101 1/8th microstep
   #define DEFAULT_AXIS_STEPS_PER_UNIT   { 100.5, 100.5, 1512, 820 } // Calculated for 1/16th microstep
 
 /**
@@ -553,7 +553,7 @@
  */
   #define DEFAULT_MAX_FEEDRATE          { 288, 288, 4, 24 }
 //#define DEFAULT_MAX_FEEDRATE          { 300, 300, 5, 25 } // default
-//#define DEFAULT_MAX_FEEDRATE          { 500, 500, 5, 45 }    // (mm/sec)  AO-101
+//#define DEFAULT_MAX_FEEDRATE          { 500, 500, 5, 45 } // (mm/sec)  AO-101
 
 /**
  * Default Max Acceleration (change/s) change = mm/s
