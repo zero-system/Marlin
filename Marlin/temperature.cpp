@@ -53,10 +53,10 @@
 #if HOTEND_USES_THERMISTOR
   #if ENABLED(TEMP_SENSOR_1_AS_REDUNDANT)
     static void* heater_ttbl_map[2] = { (void*)HEATER_0_TEMPTABLE, (void*)HEATER_1_TEMPTABLE };
-    static uint8_t heater_ttbllen_map[2] = { HEATER_0_TEMPTABLE_LEN, HEATER_1_TEMPTABLE_LEN };
+    static constexpr uint8_t heater_ttbllen_map[2] = { HEATER_0_TEMPTABLE_LEN, HEATER_1_TEMPTABLE_LEN };
   #else
     static void* heater_ttbl_map[HOTENDS] = ARRAY_BY_HOTENDS((void*)HEATER_0_TEMPTABLE, (void*)HEATER_1_TEMPTABLE, (void*)HEATER_2_TEMPTABLE, (void*)HEATER_3_TEMPTABLE, (void*)HEATER_4_TEMPTABLE);
-    static uint8_t heater_ttbllen_map[HOTENDS] = ARRAY_BY_HOTENDS(HEATER_0_TEMPTABLE_LEN, HEATER_1_TEMPTABLE_LEN, HEATER_2_TEMPTABLE_LEN, HEATER_3_TEMPTABLE_LEN, HEATER_4_TEMPTABLE_LEN);
+    static constexpr uint8_t heater_ttbllen_map[HOTENDS] = ARRAY_BY_HOTENDS(HEATER_0_TEMPTABLE_LEN, HEATER_1_TEMPTABLE_LEN, HEATER_2_TEMPTABLE_LEN, HEATER_3_TEMPTABLE_LEN, HEATER_4_TEMPTABLE_LEN);
   #endif
 #endif
 
@@ -918,17 +918,25 @@ void Temperature::manage_heater() {
 #define TEMP_AD595(RAW)  ((RAW) * 5.0 * 100.0 / 1024.0 / (OVERSAMPLENR) * (TEMP_SENSOR_AD595_GAIN) + TEMP_SENSOR_AD595_OFFSET)
 #define TEMP_AD8495(RAW) ((RAW) * 6.6 * 100.0 / 1024.0 / (OVERSAMPLENR) * (TEMP_SENSOR_AD8495_GAIN) + TEMP_SENSOR_AD8495_OFFSET)
 
-#define SCAN_THERMISTOR_TABLE(TBL,LEN) do{                          \
-  for (uint8_t i = 1; i < LEN; i++) {                               \
-    const short entry10 = (short)pgm_read_word(&TBL[i][0]);         \
-    if (entry10 > raw) {                                            \
-      const short entry00 = (short)pgm_read_word(&TBL[i-1][0]),     \
-                  entry01 = (short)pgm_read_word(&TBL[i-1][1]),     \
-                  entry11 = (short)pgm_read_word(&TBL[i][1]);       \
-      return entry01 + (raw - entry00) * float(entry11 - entry01) / float(entry10 - entry00); \
-    }                                                               \
-  }                                                                 \
-  return (short)pgm_read_word(&TBL[LEN-1][1]);                      \
+/**
+ * Bisect search for the range of the 'raw' value, then interpolate
+ * proportionally between the under and over values.
+ */
+#define SCAN_THERMISTOR_TABLE(TBL,LEN) do{                             \
+  uint8_t l = 0, r = LEN, m;                                           \
+  for (;;) {                                                           \
+    m = (l + r) >> 1;                                                  \
+    if (m == l || m == r) return (short)pgm_read_word(&TBL[LEN-1][1]); \
+    short v00 = pgm_read_word(&TBL[m-1][0]),                           \
+          v10 = pgm_read_word(&TBL[m-0][0]);                           \
+         if (raw < v00) r = m;                                         \
+    else if (raw > v10) l = m;                                         \
+    else {                                                             \
+      const short v01 = (short)pgm_read_word(&TBL[m-1][1]),            \
+                  v11 = (short)pgm_read_word(&TBL[m-0][1]);            \
+      return v01 + (raw - v00) * float(v11 - v01) / float(v10 - v00);  \
+    }                                                                  \
+  }                                                                    \
 }while(0)
 
 // Derived from RepRap FiveD extruder::getTemperature()
@@ -1201,9 +1209,7 @@ void Temperature::init() {
     HAL_ANALOG_SELECT(FILWIDTH_PIN);
   #endif
 
-  // Use timer0 for temperature measurement
-  // Interleave temperature interrupt with millies interrupt
-  OCR0B = 128;
+  HAL_timer_start(TEMP_TIMER_NUM, TEMP_TIMER_FREQUENCY);
   ENABLE_TEMPERATURE_INTERRUPT();
 
   #if HAS_AUTO_FAN_0
@@ -1695,71 +1701,71 @@ void Temperature::set_current_temp_raw() {
    *
    */
   void endstop_monitor() {
-    static uint16_t old_endstop_bits_local = 0;
+    static uint16_t old_live_state_local = 0;
     static uint8_t local_LED_status = 0;
-    uint16_t current_endstop_bits_local = 0;
+    uint16_t live_state_local = 0;
     #if HAS_X_MIN
-      if (READ(X_MIN_PIN)) SBI(current_endstop_bits_local, X_MIN);
+      if (READ(X_MIN_PIN)) SBI(live_state_local, X_MIN);
     #endif
     #if HAS_X_MAX
-      if (READ(X_MAX_PIN)) SBI(current_endstop_bits_local, X_MAX);
+      if (READ(X_MAX_PIN)) SBI(live_state_local, X_MAX);
     #endif
     #if HAS_Y_MIN
-      if (READ(Y_MIN_PIN)) SBI(current_endstop_bits_local, Y_MIN);
+      if (READ(Y_MIN_PIN)) SBI(live_state_local, Y_MIN);
     #endif
     #if HAS_Y_MAX
-      if (READ(Y_MAX_PIN)) SBI(current_endstop_bits_local, Y_MAX);
+      if (READ(Y_MAX_PIN)) SBI(live_state_local, Y_MAX);
     #endif
     #if HAS_Z_MIN
-      if (READ(Z_MIN_PIN)) SBI(current_endstop_bits_local, Z_MIN);
+      if (READ(Z_MIN_PIN)) SBI(live_state_local, Z_MIN);
     #endif
     #if HAS_Z_MAX
-      if (READ(Z_MAX_PIN)) SBI(current_endstop_bits_local, Z_MAX);
+      if (READ(Z_MAX_PIN)) SBI(live_state_local, Z_MAX);
     #endif
     #if HAS_Z_MIN_PROBE_PIN
-      if (READ(Z_MIN_PROBE_PIN)) SBI(current_endstop_bits_local, Z_MIN_PROBE);
+      if (READ(Z_MIN_PROBE_PIN)) SBI(live_state_local, Z_MIN_PROBE);
     #endif
     #if HAS_Z2_MIN
-      if (READ(Z2_MIN_PIN)) SBI(current_endstop_bits_local, Z2_MIN);
+      if (READ(Z2_MIN_PIN)) SBI(live_state_local, Z2_MIN);
     #endif
     #if HAS_Z2_MAX
-      if (READ(Z2_MAX_PIN)) SBI(current_endstop_bits_local, Z2_MAX);
+      if (READ(Z2_MAX_PIN)) SBI(live_state_local, Z2_MAX);
     #endif
 
-    uint16_t endstop_change = current_endstop_bits_local ^ old_endstop_bits_local;
+    uint16_t endstop_change = live_state_local ^ old_live_state_local;
 
     if (endstop_change) {
       #if HAS_X_MIN
-        if (TEST(endstop_change, X_MIN)) SERIAL_PROTOCOLPAIR("  X_MIN:", !!TEST(current_endstop_bits_local, X_MIN));
+        if (TEST(endstop_change, X_MIN)) SERIAL_PROTOCOLPAIR("  X_MIN:", !!TEST(live_state_local, X_MIN));
       #endif
       #if HAS_X_MAX
-        if (TEST(endstop_change, X_MAX)) SERIAL_PROTOCOLPAIR("  X_MAX:", !!TEST(current_endstop_bits_local, X_MAX));
+        if (TEST(endstop_change, X_MAX)) SERIAL_PROTOCOLPAIR("  X_MAX:", !!TEST(live_state_local, X_MAX));
       #endif
       #if HAS_Y_MIN
-        if (TEST(endstop_change, Y_MIN)) SERIAL_PROTOCOLPAIR("  Y_MIN:", !!TEST(current_endstop_bits_local, Y_MIN));
+        if (TEST(endstop_change, Y_MIN)) SERIAL_PROTOCOLPAIR("  Y_MIN:", !!TEST(live_state_local, Y_MIN));
       #endif
       #if HAS_Y_MAX
-        if (TEST(endstop_change, Y_MAX)) SERIAL_PROTOCOLPAIR("  Y_MAX:", !!TEST(current_endstop_bits_local, Y_MAX));
+        if (TEST(endstop_change, Y_MAX)) SERIAL_PROTOCOLPAIR("  Y_MAX:", !!TEST(live_state_local, Y_MAX));
       #endif
       #if HAS_Z_MIN
-        if (TEST(endstop_change, Z_MIN)) SERIAL_PROTOCOLPAIR("  Z_MIN:", !!TEST(current_endstop_bits_local, Z_MIN));
+        if (TEST(endstop_change, Z_MIN)) SERIAL_PROTOCOLPAIR("  Z_MIN:", !!TEST(live_state_local, Z_MIN));
       #endif
       #if HAS_Z_MAX
-        if (TEST(endstop_change, Z_MAX)) SERIAL_PROTOCOLPAIR("  Z_MAX:", !!TEST(current_endstop_bits_local, Z_MAX));
+        if (TEST(endstop_change, Z_MAX)) SERIAL_PROTOCOLPAIR("  Z_MAX:", !!TEST(live_state_local, Z_MAX));
       #endif
       #if HAS_Z_MIN_PROBE_PIN
-        if (TEST(endstop_change, Z_MIN_PROBE)) SERIAL_PROTOCOLPAIR("  PROBE:", !!TEST(current_endstop_bits_local, Z_MIN_PROBE));
+        if (TEST(endstop_change, Z_MIN_PROBE)) SERIAL_PROTOCOLPAIR("  PROBE:", !!TEST(live_state_local, Z_MIN_PROBE));
       #endif
       #if HAS_Z2_MIN
-        if (TEST(endstop_change, Z2_MIN)) SERIAL_PROTOCOLPAIR("  Z2_MIN:", !!TEST(current_endstop_bits_local, Z2_MIN));
+        if (TEST(endstop_change, Z2_MIN)) SERIAL_PROTOCOLPAIR("  Z2_MIN:", !!TEST(live_state_local, Z2_MIN));
       #endif
       #if HAS_Z2_MAX
-        if (TEST(endstop_change, Z2_MAX)) SERIAL_PROTOCOLPAIR("  Z2_MAX:", !!TEST(current_endstop_bits_local, Z2_MAX));
+        if (TEST(endstop_change, Z2_MAX)) SERIAL_PROTOCOLPAIR("  Z2_MAX:", !!TEST(live_state_local, Z2_MAX));
       #endif
       SERIAL_PROTOCOLPGM("\n\n");
       analogWrite(LED_PIN, local_LED_status);
       local_LED_status ^= 255;
-      old_endstop_bits_local = current_endstop_bits_local;
+      old_live_state_local = live_state_local;
     }
   }
 #endif // PINS_DEBUGGING
@@ -2122,7 +2128,7 @@ void Temperature::isr() {
         HAL_START_ADC(TEMP_CHAMBER_PIN);
         break;
       case MeasureTemp_CHAMBER:
-        raw_temp_chamber_value += ADC;
+        raw_temp_chamber_value += HAL_READ_ADC;
         break;
     #endif
 
@@ -2180,7 +2186,7 @@ void Temperature::isr() {
         break;
       case Measure_ADC_KEY:
         if (ADCKey_count < 16) {
-          raw_ADCKey_value = ADC;
+          raw_ADCKey_value = HAL_READ_ADC;
           if (raw_ADCKey_value > 900) {
             //ADC Key release
             ADCKey_count = 0;
